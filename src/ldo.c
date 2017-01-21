@@ -491,7 +491,7 @@ int luaD_pcall (lua_State *L, Pfunc func, void *u,
   status = luaD_rawrunprotected(L, func, u);
   // 如果status不为0,则表示有错误发生
   if (status != 0) {  /* an error occurred? */
-	// 将保存的ci和top取出来恢复
+	  // 将保存的ci和top取出来恢复
     StkId oldtop = restorestack(L, old_top);
     luaF_close(L, oldtop);  /* close eventual pending closures */
     luaD_seterrorobj(L, status, oldtop);

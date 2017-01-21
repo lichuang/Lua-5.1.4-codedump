@@ -491,6 +491,8 @@ static void checkSizes (lua_State *L) {
   /* check size of string hash */
   if (g->strt.nuse < cast(lu_int32, g->strt.size/4) &&
       g->strt.size > MINSTRTABSIZE*2)
+    // 字符串的数量小于桶数组数量的1/4，同时还大于最低要求的hash桶数量两倍时
+    // 此时桶数组就太大，有点浪费了，于是这里将桶大小减一倍
     luaS_resize(L, g->strt.size/2);  /* table is too big */
   /* check size of buffer */
   if (luaZ_sizebuffer(&g->buff) > LUA_MINBUFFER*2) {  /* buffer too big? */

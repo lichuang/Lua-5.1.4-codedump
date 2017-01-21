@@ -18,7 +18,7 @@
 #include "lstring.h"
 
 
-
+// 对保存string的hash桶进行resize
 void luaS_resize (lua_State *L, int newsize) {
   GCObject **newhash;
   stringtable *tb;
@@ -34,6 +34,7 @@ void luaS_resize (lua_State *L, int newsize) {
     while (p) {  /* for each node in the list */
       GCObject *next = p->gch.next;  /* save next */
       unsigned int h = gco2ts(p)->hash;
+      // 重新计算hash桶索引，这次需要mod新的hash桶大小
       int h1 = lmod(h, newsize);  /* new position */
       lua_assert(cast_int(h%newsize) == lmod(h, newsize));
       p->gch.next = newhash[h1];  /* chain it */
@@ -66,6 +67,8 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
   ts->tsv.next = tb->hash[h];  /* chain new entry */
   tb->hash[h] = obj2gco(ts);
   tb->nuse++;
+  // 在hash桶数组大小小于MAX_INT/2的情况下，
+  // 只要字符串数量大于桶数组数量就开始成倍的扩充桶的容量
   if (tb->nuse > cast(lu_int32, tb->size) && tb->size <= MAX_INT/2)
     luaS_resize(L, tb->size*2);  /* too crowded */
   return ts;
