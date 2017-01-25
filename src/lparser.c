@@ -233,10 +233,10 @@ static void markupval (FuncState *fs, int level) {
   if (bl) bl->upval = 1;
 }
 
-// 搜索变量的辅助函数,只有可能三种类型:VGLOBAL(全局变量),VLOCAL(局部变量),VUPVAL(up值)
+// 搜索变量的辅助函数,只有可能三种类型:VGLOBAL(全局变量),VLOCAL(局部变量),VUPVAL(upvalue)
 static int singlevaraux (FuncState *fs, TString *n, expdesc *var, int base) {
   if (fs == NULL) {  /* no more levels? */
-	// 如果没有在任何函数中, 那么是全局变量
+	  // 如果没有在任何函数中, 那么是全局变量
     init_exp(var, VGLOBAL, NO_REG);  /* default is global variable */
     return VGLOBAL;
   }

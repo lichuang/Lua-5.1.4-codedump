@@ -409,13 +409,13 @@ static void resume (lua_State *L, void *ud) {
   StkId firstArg = cast(StkId, ud);
   CallInfo *ci = L->ci;
   if (L->status == 0) {  /* start coroutine? */
-	// 协程第一次运行的情况
+	  // 协程第一次运行的情况
     lua_assert(ci == L->base_ci && firstArg > L->base);
     if (luaD_precall(L, firstArg - 1, LUA_MULTRET) != PCRLUA)
       return;
   }
   else {  /* resuming from previous yield */
-	// 从之前的状态中恢复
+	  // 从之前的状态中恢复
     lua_assert(L->status == LUA_YIELD);
     L->status = 0;
     if (!f_isLua(ci)) {  /* `common' yield? */
@@ -444,13 +444,17 @@ static int resume_error (lua_State *L, const char *msg) {
 LUA_API int lua_resume (lua_State *L, int nargs) {
   int status;
   lua_lock(L);
+  // 检查状态
   if (L->status != LUA_YIELD && (L->status != 0 || L->ci != L->base_ci))
       return resume_error(L, "cannot resume non-suspended coroutine");
+  // 函数调用层次太多
   if (L->nCcalls >= LUAI_MAXCCALLS)
     return resume_error(L, "C stack overflow");
   luai_userstateresume(L, nargs);
   lua_assert(L->errfunc == 0);
+  // 调用之前递增函数调用层次
   L->baseCcalls = ++L->nCcalls;
+  // 以保护模式调用函数
   status = luaD_rawrunprotected(L, resume, L->top - nargs);
   if (status != 0) {  /* error? */
     L->status = cast_byte(status);  /* mark thread as `dead' */
@@ -461,6 +465,7 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
     lua_assert(L->nCcalls == L->baseCcalls);
     status = L->status;
   }
+  // 减少调用层次
   --L->nCcalls;
   lua_unlock(L);
   return status;

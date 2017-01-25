@@ -182,15 +182,18 @@ typedef struct MatchState {
 #define L_ESC		'%'
 #define SPECIALS	"^$*+?.([%-"
 
-
+// 检查某个捕获的状态
 static int check_capture (MatchState *ms, int l) {
+  // 因为l是数字的字符串，如"1","2"等，所以减去"1"就是捕获数组的索引
   l -= '1';
+  // 不能：小于0、大于当前层次、状态处于未完成状态
   if (l < 0 || l >= ms->level || ms->capture[l].len == CAP_UNFINISHED)
     return luaL_error(ms->L, "invalid capture index");
   return l;
 }
 
 
+// 从最高层次开始降序查找，返回第一个标记为CAP_UNFINISHED，即未终止的捕获索引
 static int capture_to_close (MatchState *ms) {
   int level = ms->level;
   for (level--; level>=0; level--)
@@ -198,7 +201,7 @@ static int capture_to_close (MatchState *ms) {
   return luaL_error(ms->L, "invalid pattern capture");
 }
 
-
+// 返回分类的结束字符
 static const char *classend (MatchState *ms, const char *p) {
   switch (*p++) {
     case L_ESC: {
@@ -222,7 +225,7 @@ static const char *classend (MatchState *ms, const char *p) {
   }
 }
 
-
+// 匹配类型
 static int match_class (int c, int cl) {
   int res;
   switch (tolower(cl)) {
@@ -238,6 +241,7 @@ static int match_class (int c, int cl) {
     case 'z' : res = (c == 0); break;
     default: return (cl == c);
   }
+  // 传入的cl字符，为大写的情况下，与小写的匹配情况为互补关系
   return (islower(cl) ? res : !res);
 }
 
@@ -245,17 +249,24 @@ static int match_class (int c, int cl) {
 static int matchbracketclass (int c, const char *p, const char *ec) {
   int sig = 1;
   if (*(p+1) == '^') {
+    // 如果以^开头，表示结果要取反
     sig = 0;
+    // 跳过^
     p++;  /* skip the `^' */
   }
   while (++p < ec) {
     if (*p == L_ESC) {
+      // 跳过转义符
       p++;
+      // 到转义类型里面去匹配
       if (match_class(c, uchar(*p)))
         return sig;
     }
     else if ((*(p+1) == '-') && (p+2 < ec)) {
+      // 如果下一个字符是-，而且再下一个字符不是结束
+      // 表示这是一个范围查询
       p+=2;
+      // 判断C是否在这个范围
       if (uchar(*(p-2)) <= c && c <= uchar(*p))
         return sig;
     }
@@ -264,12 +275,16 @@ static int matchbracketclass (int c, const char *p, const char *ec) {
   return !sig;
 }
 
-
+// 返回1表示匹配，0表示不匹配
 static int singlematch (int c, const char *p, const char *ep) {
   switch (*p) {
+    // .可以匹配任意字符
     case '.': return 1;  /* matches any char */
+    // 为转义字符的情况              
     case L_ESC: return match_class(c, uchar(*(p+1)));
+    // 匹配[]的情况                
     case '[': return matchbracketclass(c, p, ep-1);
+    // 精确匹配              
     default:  return (uchar(*p) == c);
   }
 }
@@ -301,9 +316,11 @@ static const char *matchbalance (MatchState *ms, const char *s,
 static const char *max_expand (MatchState *ms, const char *s,
                                  const char *p, const char *ep) {
   ptrdiff_t i = 0;  /* counts maximum expand for item */
+  // 先在原先的范围内持续匹配
   while ((s+i)<ms->src_end && singlematch(uchar(*(s+i)), p, ep))
     i++;
   /* keeps trying to match with the maximum repetitions */
+  // 为什么到了这里，还要继续找？
   while (i>=0) {
     const char *res = match(ms, (s+i), ep+1);
     if (res) return res;
@@ -326,35 +343,46 @@ static const char *min_expand (MatchState *ms, const char *s,
 }
 
 
+// 开始capture的准备工作
 static const char *start_capture (MatchState *ms, const char *s,
                                     const char *p, int what) {
   const char *res;
   int level = ms->level;
+  // capture的层次是不是过多了？
   if (level >= LUA_MAXCAPTURES) luaL_error(ms->L, "too many captures");
+  // 初始化这一层capture的信息
   ms->capture[level].init = s;
   ms->capture[level].len = what;
+  // 递增层次
   ms->level = level+1;
+  // 正式进入match流程
   if ((res=match(ms, s, p)) == NULL)  /* match failed? */
     ms->level--;  /* undo capture */
   return res;
 }
 
 
+// 结束capture的工作
 static const char *end_capture (MatchState *ms, const char *s,
                                   const char *p) {
+  // 找到需要关闭的捕获层次
   int l = capture_to_close(ms);
   const char *res;
+  // 前面长度的赋值都是类型，在这里可以正式计算这部分的长度了
   ms->capture[l].len = s - ms->capture[l].init;  /* close capture */
   if ((res = match(ms, s, p)) == NULL)  /* match failed? */
+    // 捕获失败，重新标记为CAP_UNFINISHED
     ms->capture[l].len = CAP_UNFINISHED;  /* undo capture */
   return res;
 }
 
-
+// 使用前面捕获的信息来进行这次捕获,传入的l是数字的字符串，如"1","2"等
 static const char *match_capture (MatchState *ms, const char *s, int l) {
   size_t len;
+  // 首先检查传入的捕获是不是close了
   l = check_capture(ms, l);
   len = ms->capture[l].len;
+  // 精确匹配：长度和字符串都要匹配上
   if ((size_t)(ms->src_end-s) >= len &&
       memcmp(ms->capture[l].init, s, len) == 0)
     return s+len;
@@ -363,12 +391,16 @@ static const char *match_capture (MatchState *ms, const char *s, int l) {
 
 
 static const char *match (MatchState *ms, const char *s, const char *p) {
+  // 为了不进行尾递归调用，这里声明了一个叫init的标签，match函数内任何需要调用match的地方，
+  // 都跳转到这里来
   init: /* using goto's to optimize tail recursion */
   switch (*p) {
     case '(': {  /* start capture */
       if (*(p+1) == ')')  /* position capture? */
+        // 空()，表示是位置捕获,此时传入的标记是CAP_POSITION
         return start_capture(ms, s, p+2, CAP_POSITION);
       else
+        // 否则就是一个常规的捕获，此时传入的标记是CAP_UNFINISHED
         return start_capture(ms, s, p+1, CAP_UNFINISHED);
     }
     case ')': {  /* end capture */
@@ -395,10 +427,12 @@ static const char *match (MatchState *ms, const char *s, const char *p) {
         }
         default: {
           if (isdigit(uchar(*(p+1)))) {  /* capture results (%0-%9)? */
+            // 以前面match的捕获结果来匹配
             s = match_capture(ms, s, uchar(*(p+1)));
             if (s == NULL) return NULL;
             p+=2; goto init;  /* else return match(ms, s, p+2) */
           }
+          // 除此之外的其他情况，全都到dflt标签去匹配
           goto dflt;  /* case default */
         }
       }
@@ -412,7 +446,9 @@ static const char *match (MatchState *ms, const char *s, const char *p) {
       else goto dflt;
     }
     default: dflt: {  /* it is a pattern item */
+      // ep指向结束位置               
       const char *ep = classend(ms, p);  /* points to what is next */
+      // m表示是否match
       int m = s<ms->src_end && singlematch(uchar(*s), p, ep);
       switch (*ep) {
         case '?': {  /* optional */
@@ -475,13 +511,15 @@ static void push_onecapture (MatchState *ms, int i, const char *s,
     ptrdiff_t l = ms->capture[i].len;
     if (l == CAP_UNFINISHED) luaL_error(ms->L, "unfinished capture");
     if (l == CAP_POSITION)
+      // 捕获位置的情况下，返回的是位置信息
       lua_pushinteger(ms->L, ms->capture[i].init - ms->src_init + 1);
     else
+      // 否则返回的是捕获的字符串信息
       lua_pushlstring(ms->L, ms->capture[i].init, l);
   }
 }
 
-
+// 将所有层次捕获的字符串压入栈，返回值为层次数
 static int push_captures (MatchState *ms, const char *s, const char *e) {
   int i;
   int nlevels = (ms->level == 0 && s) ? 1 : ms->level;
@@ -491,17 +529,22 @@ static int push_captures (MatchState *ms, const char *s, const char *e) {
   return nlevels;  /* number of strings pushed */
 }
 
-
+//传入的参数格式：(s, pattern [, index [, plain]])
+//最后两个参数可选，第四个参数plain为1时表示不采用模式匹配，使用的是最基本的字符串匹配
 static int str_find_aux (lua_State *L, int find) {
   size_t l1, l2;
+  // 获取源字符串，存入s，长度存入l1
   const char *s = luaL_checklstring(L, 1, &l1);
+  // 获取pattern字符串，存入p，长度存入l2
   const char *p = luaL_checklstring(L, 2, &l2);
   ptrdiff_t init = posrelat(luaL_optinteger(L, 3, 1), l1) - 1;
   if (init < 0) init = 0;
   else if ((size_t)(init) > l1) init = (ptrdiff_t)l1;
+  // 根据第四个参数判断是否不采用模式匹配
   if (find && (lua_toboolean(L, 4) ||  /* explicit request? */
       strpbrk(p, SPECIALS) == NULL)) {  /* or no special characters? */
     /* do a plain search */
+    // 不采用模式匹配走的是lmemfind函数
     const char *s2 = lmemfind(s+init, l1-init, p, l2);
     if (s2) {
       lua_pushinteger(L, s2-s+1);
@@ -521,11 +564,14 @@ static int str_find_aux (lua_State *L, int find) {
       ms.level = 0;
       if ((res=match(&ms, s1, p)) != NULL) {
         if (find) {
+          // 将start位置push进去
           lua_pushinteger(L, s1-s+1);  /* start */
+          // 将end位置push进去
           lua_pushinteger(L, res-s);   /* end */
           return push_captures(&ms, NULL, 0) + 2;
         }
         else
+          // match而非find的情况下，只需要把捕获的字符串返回即可
           return push_captures(&ms, s1, res);
       }
     } while (s1++ < ms.src_end && !anchor);

@@ -512,14 +512,17 @@ LUALIB_API int luaL_ref (lua_State *L, int t) {
     lua_pop(L, 1);  /* remove from stack */
     return LUA_REFNIL;  /* `nil' has a unique fixed reference */
   }
+  // 首先从表的数组部分的FREELIST_REF取下一个元素
   lua_rawgeti(L, t, FREELIST_REF);  /* get first free element */
   ref = (int)lua_tointeger(L, -1);  /* ref = t[FREELIST_REF] */
   lua_pop(L, 1);  /* remove it from stack */
   if (ref != 0) {  /* any free element? */
+    // 不为0的情况下说明是可用的数据，将t[FREELIST_REF]指向这个元素的下一个元素
     lua_rawgeti(L, t, ref);  /* remove it from list */
     lua_rawseti(L, t, FREELIST_REF);  /* (t[FREELIST_REF] = t[ref]) */
   }
   else {  /* no free elements */
+    // 否则就是没有可用元素了，直接以表的数组部分大小来作为新的索引数据
     ref = (int)lua_objlen(L, t);
     ref++;  /* create new reference */
   }
@@ -530,6 +533,9 @@ LUALIB_API int luaL_ref (lua_State *L, int t) {
 
 LUALIB_API void luaL_unref (lua_State *L, int t, int ref) {
   if (ref >= 0) {
+    // 将ref归还给freelist
+    // 假设原来的链表是：t[FREELIST_REF] = t[a]
+    // 那么归还之后就是：t[FREELIST_REF] = t[ref] = t[a]
     t = abs_index(L, t);
     lua_rawgeti(L, t, FREELIST_REF);
     lua_rawseti(L, t, ref);  /* t[ref] = t[FREELIST_REF] */
