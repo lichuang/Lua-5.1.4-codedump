@@ -275,7 +275,7 @@ static int matchbracketclass (int c, const char *p, const char *ec) {
   return !sig;
 }
 
-// 返回1表示匹配，0表示不匹配
+// 单字符的匹配，返回1表示匹配，0表示不匹配
 static int singlematch (int c, const char *p, const char *ep) {
   switch (*p) {
     // .可以匹配任意字符
