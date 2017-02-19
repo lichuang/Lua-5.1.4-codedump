@@ -234,6 +234,7 @@ static void markupval (FuncState *fs, int level) {
 }
 
 // 搜索变量的辅助函数,只有可能三种类型:VGLOBAL(全局变量),VLOCAL(局部变量),VUPVAL(upvalue)
+// 参数base：1表示在本层函数环境中进行的查找，0表示在上层进行的查找
 static int singlevaraux (FuncState *fs, TString *n, expdesc *var, int base) {
   if (fs == NULL) {  /* no more levels? */
 	  // 如果没有在任何函数中, 那么是全局变量
