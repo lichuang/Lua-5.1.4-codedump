@@ -88,8 +88,9 @@ typedef struct global_State {
   lu_mem estimate;  /* an estimate of number of bytes actually in use */
   // 当前待GC的数据大小，其实就是累加totalbytes和GCthreshold的差值
   lu_mem gcdept;  /* how much GC is `behind schedule' */
-  // 可以配置的一个值，不是计算出来的，根据这个计算GCthreshold
+  // 可以配置的一个值，不是计算出来的，根据这个计算GCthreshold，以此来控制下一次GC触发的时间
   int gcpause;  /* size of pause between successive GCs */
+  // 每次进行GC操作回收的数据比例，见lgc.c/luaC_step函数
   int gcstepmul;  /* GC `granularity' */
   lua_CFunction panic;  /* to be called in unprotected errors */
   TValue l_registry;

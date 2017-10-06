@@ -148,6 +148,7 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source) {
   ls->lastline = 1;
   ls->source = source;
   luaZ_resizebuffer(ls->L, ls->buff, LUA_MINBUFFER);  /* initialize buffer */
+  // 提前预读第一个字符到current中
   next(ls);  /* read first char */
 }
 

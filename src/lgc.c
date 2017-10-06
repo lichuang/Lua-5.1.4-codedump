@@ -59,7 +59,7 @@
 #define markobject(g,t) { if (iswhite(obj2gco(t))) \
 		reallymarkobject(g, obj2gco(t)); }
 
-// ？？？？？？？？？
+// 设置触发GC的阈值：estimate的值的某个百分比，这个百分比由gcpause参数控制
 #define setthreshold(g)  (g->GCthreshold = (g->estimate/100) * g->gcpause)
 
 
@@ -177,13 +177,13 @@ static int traversetable (global_State *g, Table *h) {
   int weakkey = 0;
   int weakvalue = 0;
   const TValue *mode;
-  // mark一下meta表
+  // markmeta表
   if (h->metatable)
     markobject(g, h->metatable);
   mode = gfasttm(g, h->metatable, TM_MODE);
   // 如果__mode元方法被定义
   if (mode && ttisstring(mode)) {  /* is there a weak mode? */
-	// 判断是弱键还是弱值
+	  // 判断是弱键还是弱值
     weakkey = (strchr(svalue(mode), 'k') != NULL);
     weakvalue = (strchr(svalue(mode), 'v') != NULL);
     if (weakkey || weakvalue) {  /* is really weak? */
@@ -198,7 +198,7 @@ static int traversetable (global_State *g, Table *h) {
       g->weak = obj2gco(h);  /* ... so put in the appropriate list */
     }
   }
-  // 如果既是弱值也是弱键直接返回了
+  // 如果既是弱值也是弱键直接返回了，表中的数据都不需要进行标记
   if (weakkey && weakvalue) return 1;
   // 如果不是弱值，那么需要mark所有的数组值
   if (!weakvalue) {
@@ -339,6 +339,7 @@ static l_mem propagatemark (global_State *g) {
     case LUA_TTHREAD: {
       lua_State *th = gco2th(o);
       g->gray = th->gclist;
+      // 线程对象由于也是1:N的对应关系，所以也是加入到grayagain链表中
       th->gclist = g->grayagain;
       g->grayagain = o;
       black2gray(o);
@@ -572,8 +573,10 @@ static void markroot (lua_State *L) {
   g->weak = NULL;
   markobject(g, g->mainthread);
   /* make global table be traversed before main stack */
+  // 标记g表和reg表
   markvalue(g, gt(g->mainthread));
   markvalue(g, registry(L));
+  // 标记meta表
   markmt(g);
   g->gcstate = GCSpropagate;
 }
@@ -598,6 +601,7 @@ static void atomic (lua_State *L) {
   /* traverse objects cautch by write barrier and by 'remarkupvals' */
   propagateall(g);
   /* remark weak tables */
+  // 标记弱表
   g->gray = g->weak;
   g->weak = NULL;
   lua_assert(!iswhite(obj2gco(g->mainthread)));
@@ -605,6 +609,7 @@ static void atomic (lua_State *L) {
   markmt(g);  /* mark basic metatables (again) */
   propagateall(g);
   /* remark gray again */
+  // 遍历again链表进行标记
   g->gray = g->grayagain;
   g->grayagain = NULL;
   propagateall(g);
@@ -635,7 +640,7 @@ static l_mem singlestep (lua_State *L) {
       if (g->gray)
         return propagatemark(g);
       else {  /* no more `gray' objects */
-    	// 再也没有灰色的对象了,来一个原子的mark过程
+    	  // 再也没有灰色的对象了,来一个原子的mark过程
         atomic(L);  /* finish mark phase */
         return 0;
       }
@@ -652,6 +657,8 @@ static l_mem singlestep (lua_State *L) {
       lua_assert(old >= g->totalbytes);
       // 减少估值
       g->estimate -= old - g->totalbytes;
+      // 我猜想这里返回一个固定的值，而不是按照实际回收的大小返回
+      // 是因为前面扫描阶段已经返回实际的值了？
       return GCSWEEPCOST;
     }
     case GCSsweep: {
@@ -663,6 +670,8 @@ static l_mem singlestep (lua_State *L) {
       }
       lua_assert(old >= g->totalbytes);
       g->estimate -= old - g->totalbytes;
+      // 我猜想这里返回一个固定的值，而不是按照实际回收的大小返回
+      // 是因为前面扫描阶段已经返回实际的值了？
       return GCSWEEPMAX*GCSWEEPCOST;
     }
     case GCSfinalize: {
@@ -686,10 +695,13 @@ static l_mem singlestep (lua_State *L) {
 void luaC_step (lua_State *L) {
   global_State *g = G(L);
   // 大致估算本次回收要回收多少数据
+  // 其中，gcstepmul用于控制这次回收是GCSTEPSIZE的多少百分比
+  // 显然这个数据越大，在后面的singlestep函数中调用的时间就越长
   l_mem lim = (GCSTEPSIZE/100) * g->gcstepmul;
+  // 为0的情况说明是无限制，所以还是需要设置一个具体的数据
   if (lim == 0)
     lim = (MAX_LUMEM-1)/2;  /* no limit */
-  // 首先累加本次totalbytes和GCthreshold，知道要到自动GC完毕要回收多少数据
+  // 首先累加本次totalbytes和GCthreshold的差值，知道要到自动GC完毕要回收多少数据
   g->gcdept += g->totalbytes - g->GCthreshold;
   do {
     lim -= singlestep(L);
@@ -699,15 +711,19 @@ void luaC_step (lua_State *L) {
   if (g->gcstate != GCSpause) {
 	 // 走到这里，说明lim不大于0，也就是本次自动GC将预估的数据大小全部回收了
     if (g->gcdept < GCSTEPSIZE)
-      // 如果现在已经比GCSTEPSIZE（自动GC要求的尺寸）小，那么设置GCthreshold比totalbytes大GCSTEPSIZE
+      // 如果待GC的数据大小比GCSTEPSIZE（自动GC要求的尺寸）小，那么设置GCthreshold比totalbytes大GCSTEPSIZE
+      // 也就是说，只要totalbyte多分配了GCSTEPSIZE的数量，就马上触发GC操作。
       g->GCthreshold = g->totalbytes + GCSTEPSIZE;  /* - lim/g->gcstepmul;*/
     else {
+      // 为什么这里是减去GCSTEPSIZE，这一次回收不见得就是回收了GCSTEPSIZE这么多的内存啊？！
       g->gcdept -= GCSTEPSIZE;
+      // 马上触发下一次GC
       g->GCthreshold = g->totalbytes;
     }
   }
   else {
-	// 走到这里，说明g->gcstate == GCSpause
+	  // 走到这里，说明g->gcstate == GCSpause
+    // 说明已经完成了一次完整的GC
     lua_assert(g->totalbytes >= g->estimate);
     // 重新设置GCthreshold
     setthreshold(g);
@@ -720,6 +736,8 @@ void luaC_fullgc (lua_State *L) {
   // 重新把所有对象都mark成白色
   if (g->gcstate <= GCSpropagate) {
     /* reset sweep marks to sweep all elements (returning them to white) */
+    // 注意在这里并没有改变当前白色，因此在前面标记过的数据并不会被回收
+    // 所以在这里只是简单的重置了状态而已
     g->sweepstrgc = 0;
     g->sweepgc = &g->rootgc;
     /* reset other collector lists */
@@ -730,7 +748,8 @@ void luaC_fullgc (lua_State *L) {
   }
   lua_assert(g->gcstate != GCSpause && g->gcstate != GCSpropagate);
   /* finish any pending sweep phase */
-  // 这里仅执行sweep和sweepstring两个过程，将所有对象重新mark成白色
+  // 这里仅执行sweep和sweepstring两个过程，因为前面没有改变白色，
+  // 所以这里只是将所有对象重新mark成白色
   while (g->gcstate != GCSfinalize) {
     lua_assert(g->gcstate == GCSsweepstring || g->gcstate == GCSsweep);
     singlestep(L);
@@ -762,7 +781,9 @@ void luaC_barrierf (lua_State *L, GCObject *o, GCObject *v) {
 }
 
 // 从黑色回到灰色,意思是回退一步，加入grayagain链表（因为grayagain是需要一次原子过程去mark的对象链表）
-// back仅针对table类型成员,因为table对象经常出现N个table存放的是同一个对象也就是N:1的情况
+// back仅针对table类型成员,因为table对象经常出现1个table对象存放的是N个对象也就是1:N的情况
+// 如果每个table在受到其中一个对象的影响都要重新标记，那会操作的很频繁，所以就索性回退处理
+// 等待后续的atomic过程才一次性处理这个重新加入grayagain链表的对象
 void luaC_barrierback (lua_State *L, Table *t) {
   global_State *g = G(L);
   GCObject *o = obj2gco(t);

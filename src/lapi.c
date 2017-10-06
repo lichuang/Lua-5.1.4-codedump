@@ -937,21 +937,24 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
     }
     case LUA_GCCOUNT: {
       /* GC values are expressed in Kbytes: #bytes/2^10 */
+      // 换算成KBytes
       res = cast_int(g->totalbytes >> 10);
       break;
     }
     case LUA_GCCOUNTB: {
+      // 换算成bit
       res = cast_int(g->totalbytes & 0x3ff);
       break;
     }
     case LUA_GCSTEP: {
+      // 首先换算成byte
       lu_mem a = (cast(lu_mem, data) << 10);
       if (a <= g->totalbytes)
         g->GCthreshold = g->totalbytes - a;
       else
         g->GCthreshold = 0;
       while (g->GCthreshold <= g->totalbytes) {
-    	// 当当前内存数据还是大于所要求的阙值时,就一直进行回收操作
+    	  // 当当前内存数据还是大于所要求的阙值时,就一直进行回收操作
         luaC_step(L);
         // GC停止了, 返回错误
         if (g->gcstate == GCSpause) {  /* end of cycle? */
