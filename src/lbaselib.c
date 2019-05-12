@@ -532,13 +532,18 @@ static int auxresume (lua_State *L, lua_State *co, int narg) {
   lua_setlevel(L, co);
   status = lua_resume(co, narg);
   if (status == 0 || status == LUA_YIELD) {
+    // 如果执行的过程中，协程yield出去了执行权
+    // 拿到栈上的数据，这些数据是协程yield函数中带上的参数
+    // 需要返回给主线程的
     int nres = lua_gettop(co);
     if (!lua_checkstack(L, nres + 1))
       luaL_error(L, "too many results to resume");
+    // 将这些参数从协程所在环境拷贝到主vm中
     lua_xmove(co, L, nres);  /* move yielded values */
     return nres;
   }
   else {
+    // 否则就是出错了，将出错信息拷贝到主vm中
     lua_xmove(co, L, 1);  /* move error message */
     return -1;  /* error flag */
   }
@@ -546,6 +551,7 @@ static int auxresume (lua_State *L, lua_State *co, int narg) {
 
 
 static int luaB_coresume (lua_State *L) {
+  // 第一个参数一定是coroutine指针
   lua_State *co = lua_tothread(L, 1);
   int r;
   luaL_argcheck(L, co, 1, "coroutine expected");

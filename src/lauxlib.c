@@ -504,7 +504,12 @@ LUALIB_API void luaL_buffinit (lua_State *L, luaL_Buffer *B) {
 
 /* }====================================================== */
 
-
+/*
+ * Creates and returns a reference, in the table at index t, for the object at the top of the stack (and pops the object).
+A reference is a unique integer key. As long as you do not manually add integer keys into table t, luaL_ref ensures the uniqueness of the key it returns. You can retrieve an object referred by reference r by calling lua_rawgeti(L, t, r). Function luaL_unref frees a reference and its associated object.
+If the object at the top of the stack is nil, luaL_ref returns the constant LUA_REFNIL. The constant LUA_NOREF is guaranteed to be different from any reference returned by luaL_ref.
+ *  在当前栈索引t处的元素是一个table, 在该table中创建一个对象, 对象是当前栈顶的元素, 并返回创建对象在表中的索引值, 之后会pop栈顶的对象; (即将栈顶元素放到t对应的table中)
+ */
 LUALIB_API int luaL_ref (lua_State *L, int t) {
   int ref;
   t = abs_index(L, t);

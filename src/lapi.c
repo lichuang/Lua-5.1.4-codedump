@@ -169,6 +169,7 @@ LUA_API void lua_settop (lua_State *L, int idx) {
   lua_lock(L);
   if (idx >= 0) {
     api_check(L, idx <= L->stack_last - L->base);
+    // top多出来的值设置为nil
     while (L->top < L->base + idx)
       setnilvalue(L->top++);
     L->top = L->base + idx;
