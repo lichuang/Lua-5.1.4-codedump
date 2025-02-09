@@ -23,15 +23,56 @@ MYLIBS=
 PLATS= aix ansi bsd freebsd generic linux macosx mingw posix solaris
 
 LUA_A=	liblua.a
+# 虚拟机核心
+# 文件名		作用							对外接口前缀
+# lapi.c 	    C语言接口						 lua_
+# lcode.c  		源码生成器						 luaK_
+# ldebug.c  	调试库							 luaG_
+# ldo.c    		函数调用及栈管理				  luaD_
+# ldump.c		序列化预编译的Lua字节码	
+# lfunc.c  		提供操作函数原型及闭包的辅助函数   luaF_
+# lgc.c    		垃圾回收						 luaC_
+# llex.c    	词法分析器					     luaX_
+# lmem.c    	内存管理						 luaM_
+# lobject.c		对象管理						 luaO_
+# lopcodes.c	字节码操作						 luaP_
+# lparser.c  	语法分析器					     luaY_
+# lstate.c		全局状态机				  		 luaE_
+# lstring.c		字符串操作						 luaS_
+# ltable.c		表操作							 luaH_
+# ltm.c			tag方法						 	 luaT_
+# lundump.c		加载预编译字节码				  luaU_
+# lvm.c    		lua虚拟机						 luaV_
+# lzio.c		缓存流接口				      	 luaZ_
 CORE_O=	lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o \
 	lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o  \
 	lundump.o lvm.o lzio.o
+
+# 内嵌库
+# 文件名		作用							对外接口前缀
+# lauxlib.c		库编写时需要用到的辅助函数库	 luaL_
+# lbaselib.c	基础库
+# ldblib.c		调试库
+# liolib.c		IO库					       
+# lmathlib.c	标准数据库					   
+# loslib.c		OS库
+# ltablib.c		表操作库
+# lstrlib.c		字符串操作库
+# loadlib.c		动态扩展库加载器
+# linit.c		负责内嵌库初始化
 LIB_O=	lauxlib.o lbaselib.o ldblib.o liolib.o lmathlib.o loslib.o ltablib.o \
 	lstrlib.o loadlib.o linit.o
 
+
+# 解释器
+# 文件名		作用							对外接口前缀
+# lua.c			解释器
 LUA_T=	lua
 LUA_O=	lua.o
 
+# 编译器
+# 文件名		作用							对外接口前缀
+# luac.c		编译器
 LUAC_T=	luac
 LUAC_O=	luac.o print.o
 

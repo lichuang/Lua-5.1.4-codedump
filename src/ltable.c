@@ -468,6 +468,7 @@ static TValue *newkey (lua_State *L, Table *t, const TValue *key) {
       while (gnext(othern) != mp) othern = gnext(othern);  /* find previous */
       gnext(othern) = n;  /* redo the chain with `n' in place of `mp' */
       *n = *mp;  /* copy colliding node into free pos. (mp->next also goes) */
+      
       gnext(mp) = NULL;  /* now `mp' is free */
       setnilvalue(gval(mp));
     }
